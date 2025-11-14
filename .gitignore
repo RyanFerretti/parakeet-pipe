@@ -9,6 +9,7 @@ outputs/
 *.mp3
 *.json
 *.txt
+!requirements*.txt
 
 # Python cache
 __pycache__/
