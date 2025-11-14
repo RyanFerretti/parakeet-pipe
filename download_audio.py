@@ -35,7 +35,13 @@ def resolve_output_path(
     return downloads_dir / f"{slug}.{audio_format}"
 
 
-def download_audio(url: str, output_path: Path, audio_format: str, quiet: bool) -> Path:
+def download_audio(
+    url: str,
+    output_path: Path,
+    audio_format: str,
+    quiet: bool,
+    cookies_file: Optional[Path] = None,
+) -> Path:
     output_path = output_path.expanduser()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     template = str(output_path.parent / f"{output_path.stem}.%(ext)s")
@@ -60,6 +66,12 @@ def download_audio(url: str, output_path: Path, audio_format: str, quiet: bool) 
             "1",
         ],
     }
+
+    if cookies_file:
+        resolved_cookies = Path(cookies_file).expanduser()
+        if not resolved_cookies.exists():
+            raise FileNotFoundError(f"Cookies file not found: {resolved_cookies}")
+        ydl_opts["cookiefile"] = str(resolved_cookies)
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -98,6 +110,10 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
         help="Console logging level.",
     )
+    parser.add_argument(
+        "--cookies-file",
+        help="Path to a cookies.txt (Netscape format) file for authenticated YouTube downloads.",
+    )
     return parser
 
 
@@ -115,7 +131,11 @@ def main(argv: Optional[list] = None) -> int:
 
     try:
         final_path = download_audio(
-            args.url, output_path, args.audio_format, quiet=args.quiet
+            args.url,
+            output_path,
+            args.audio_format,
+            quiet=args.quiet,
+            cookies_file=args.cookies_file,
         )
     except Exception as exc:
         logging.exception("Failed to download audio: %s", exc)

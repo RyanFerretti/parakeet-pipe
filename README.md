@@ -66,7 +66,8 @@ Assume `$ID` is the YouTube video ID. Each step writes into `downloads/` and `ou
 # Download + resample (Parakeet env)
 source envs/parakeet/bin/activate
 python download_audio.py --url https://youtube.com/watch?v=$ID \
-  --audio-format wav --output downloads/$ID.wav
+  --audio-format wav --output downloads/$ID.wav \
+  [--cookies-file cookies.txt]  # optional if YouTube requires login
 
 # Transcribe with Parakeet (still in Parakeet env)
 python cli.py --file downloads/$ID.wav \
@@ -140,7 +141,12 @@ Here’s a canonical setup for Deepnote (or any similar managed GPU notebook):
    ```bash
    # Download
    source envs/parakeet/bin/activate && \
-     python download_audio.py --url "https://youtube.com/watch?v=$ID" --audio-format wav --output downloads/$ID.wav
+     python download_audio.py --url "https://youtube.com/watch?v=$ID" \
+       --audio-format wav --output downloads/$ID.wav \
+       [--cookies-file cookies.txt]
+     python download_audio.py --url "https://youtube.com/watch?v=$ID" \
+       --audio-format wav --output downloads/$ID.wav \
+       --cookies-file cookies.txt  # optional; upload Netscape cookies file if YouTube asks you to sign in
 
    # ASR
    source envs/parakeet/bin/activate && \
@@ -168,5 +174,7 @@ Here’s a canonical setup for Deepnote (or any similar managed GPU notebook):
    ```
 5. **Inspect the outputs** under `downloads/` and `outputs/<youtube_id>/` or push them to Deepnote artifacts.
 
+> **About cookies**  
+> YouTube sometimes asks for authentication on headless/cloud runs. Export cookies from your local browser (Netscape format) using an extension such as “Get cookies.txt” or `yt-dlp --cookies-from-browser chrome --write-cookies cookies.txt`, upload the file to Deepnote, and pass `--cookies-file path/to/cookies.txt` to `download_audio.py`.
 **Timing:** Deepnote displays the runtime for each cell, so you can gauge per-stage latency directly. On a GPU runtime, ASR + diarization typically finish in under 10 minutes for an hour-long clip (versus ~35 minutes on CPU).
 
