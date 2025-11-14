@@ -118,17 +118,55 @@ outputs/<youtube_id>/verbose.json
 
 ### 4. Deepnote / Cloud Workflow
 
-1. Clone this repo into a GPU-backed workspace (T4/L4 are sufficient).
-2. Recreate the two virtualenvs (commands above).
-3. Store `HUGGINGFACE_ACCESS_TOKEN` as a secret/env variable.
-4. Run `run_pipeline.py` or add a controller notebook with cells like (note each cell activates the correct env):
+Here’s a canonical setup for Deepnote (or any similar managed GPU notebook):
 
-```python
-!source envs/parakeet/bin/activate && python download_audio.py --url ...
-!source envs/parakeet/bin/activate && python cli.py ...
-!source envs/community1/bin/activate && python community1.py ...
-!source envs/parakeet/bin/activate && python merge_segments.py ...
-```
+1. **Clone the repo** into a GPU-backed project (T4 or L4 is plenty).
+2. **Create the two virtualenvs** exactly as described in Section 1. Example cell:
+   ```bash
+   python3.12 -m venv envs/parakeet
+   source envs/parakeet/bin/activate
+   pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
+   Followed by a second cell for the Community‑1 env:
+   ```bash
+   python3.12 -m venv envs/community1
+   source envs/community1/bin/activate
+   pip install --upgrade pip
+   pip install -r requirements-community.txt --extra-index-url https://download.pytorch.org/whl/cu121
+   ```
+3. **Store `HUGGINGFACE_ACCESS_TOKEN`** as a Deepnote secret or environment variable (Project Settings → Environment → Secrets).
+4. **Run each stage from notebook cells**, making sure every cell activates the correct env:
+   ```bash
+   # Download
+   source envs/parakeet/bin/activate && \
+     python download_audio.py --url "https://youtube.com/watch?v=$ID" --audio-format wav --output downloads/$ID.wav
 
-On a GPU runtime, ASR + diarization finish in <10 minutes for a 60‑minute clip, versus ~35 minutes on CPU.
+   # ASR
+   source envs/parakeet/bin/activate && \
+     python cli.py --file downloads/$ID.wav --format json --timestamps --disable-diarization \
+       --segments-output outputs/$ID/segments.json --output outputs/$ID/transcript.json
+
+   # Diarization
+   source envs/community1/bin/activate && \
+     python community1.py downloads/$ID.wav outputs/$ID/speakers.json
+
+   # Merge
+   source envs/parakeet/bin/activate && \
+     python merge_segments.py \
+       --segments outputs/$ID/segments.json \
+       --speakers outputs/$ID/speakers.json \
+       --include-speakers-in-text \
+       --output outputs/$ID/verbose.json
+   ```
+   Or call the orchestrator instead:
+   ```bash
+   source envs/parakeet/bin/activate && \
+     python run_pipeline.py $ID \
+       --hf-token "$HUGGINGFACE_ACCESS_TOKEN" \
+       --community-python envs/community1/bin/python
+   ```
+5. **Inspect the outputs** under `downloads/` and `outputs/<youtube_id>/` or push them to Deepnote artifacts.
+
+**Timing:** Deepnote displays the runtime for each cell, so you can gauge per-stage latency directly. On a GPU runtime, ASR + diarization typically finish in under 10 minutes for an hour-long clip (versus ~35 minutes on CPU).
 
