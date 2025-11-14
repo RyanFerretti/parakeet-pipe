@@ -102,7 +102,8 @@ Run it from the Parakeet env and point it at the Community‑1 interpreter:
 source envs/parakeet/bin/activate
 python run_pipeline.py $ID \
   --hf-token "$HUGGINGFACE_ACCESS_TOKEN" \
-  --community-python envs/community1/bin/python
+  --community-python envs/community1/bin/python \
+  [--download-cookies-file cookies.txt]
 ```
 
 Artifacts created per run:

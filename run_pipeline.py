@@ -48,6 +48,10 @@ def main():
         default=None,
         help="Optional speaker count hint for diarization",
     )
+    parser.add_argument(
+        "--download-cookies-file",
+        help="Optional cookies.txt file passed to download_audio.py for authenticated YouTube downloads.",
+    )
     args = parser.parse_args()
 
     if not args.hf_token:
@@ -73,19 +77,20 @@ def main():
     env_with_token["HUGGINGFACE_ACCESS_TOKEN"] = args.hf_token
 
     # 1. Download + resample
-    run(
-        [
-            sys.executable,
-            "download_audio.py",
-            "--url",
-            youtube_url,
-            "--audio-format",
-            "wav",
-            "--output",
-            str(audio_path),
-        ],
-        label="Download audio",
-    )
+    download_cmd = [
+        sys.executable,
+        "download_audio.py",
+        "--url",
+        youtube_url,
+        "--audio-format",
+        "wav",
+        "--output",
+        str(audio_path),
+    ]
+    if args.download_cookies_file:
+        download_cmd.extend(["--cookies-file", args.download_cookies_file])
+
+    run(download_cmd, label="Download audio")
 
     # 2. Parakeet ASR
     run(
