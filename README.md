@@ -9,6 +9,9 @@ This repository contains a standalone pipeline that:
 
 The legacy FastAPI server is **not** included—this repo is only the tooling required to run the four stages locally or in the cloud (e.g. Deepnote).
 
+> **Why two virtual environments?**  
+> Parakeet (via `nemo_toolkit`) and pyannote Community‑1 pin competing versions of `torch`, `torchaudio`, and `huggingface_hub`. Splitting them into `envs/parakeet` and `envs/community1` keeps the dependency trees isolated so you can install upgrades or patches without breaking the other stage.
+
 ---
 
 ### File Map
@@ -29,7 +32,7 @@ The legacy FastAPI server is **not** included—this repo is only the tooling re
 
 ### 1. Environments (Python 3.12)
 
-Create two virtualenvs so Parakeet (NeMo) and Community‑1 can pin their own dependencies:
+Create the two envs up front:
 
 ```bash
 python3.12 -m venv envs/parakeet
@@ -43,7 +46,7 @@ pip install --upgrade pip
 pip install -r requirements-community.txt --extra-index-url https://download.pytorch.org/whl/cu121
 ```
 
-> `requirements-community.txt` lists the minimal packages (`torch`, `torchaudio`, `pyannote.audio`). The extra index URL pulls NVIDIA’s CPU/GPU wheels; adjust to your platform as needed.
+> `requirements-community.txt` lists the minimal packages (`torch`, `torchaudio`, `pyannote.audio`). The extra index URL pulls NVIDIA’s CPU/GPU wheels; adjust to your platform as needed. Keeping Community‑1 slim avoids the heavy NeMo dependency graph.
 
 Store your Hugging Face token once:
 
@@ -57,25 +60,25 @@ Add `.gitignore` entries for `envs/`, `downloads/`, `outputs/`, `*.wav`, `*.json
 
 ### 2. Manual Stage-by-Stage Run
 
-Assume `$ID` is the YouTube video ID.
+Assume `$ID` is the YouTube video ID. Each step writes into `downloads/` and `outputs/$ID/`.
 
 ```bash
-# Download + resample
+# Download + resample (Parakeet env)
 source envs/parakeet/bin/activate
 python download_audio.py --url https://youtube.com/watch?v=$ID \
   --audio-format wav --output downloads/$ID.wav
 
-# Transcribe with Parakeet (creates transcript + segments)
+# Transcribe with Parakeet (still in Parakeet env)
 python cli.py --file downloads/$ID.wav \
   --format json --timestamps --disable-diarization \
   --segments-output outputs/${ID}/segments.json \
   --output outputs/${ID}/transcript.json
 
-# Run Community‑1 diarization (use the slim env)
+# Run Community‑1 diarization (activate diarizer env so pyannote deps stay separate)
 source envs/community1/bin/activate
 python community1.py downloads/$ID.wav outputs/${ID}/speakers.json
 
-# Merge transcripts + speakers
+# Merge transcripts + speakers (switch back to Parakeet env for merge helpers)
 source envs/parakeet/bin/activate
 python merge_segments.py \
   --segments outputs/${ID}/segments.json \
@@ -90,7 +93,9 @@ python merge_segments.py \
 
 ### 3. One-Command Orchestration
 
-`run_pipeline.py` drives the four steps automatically. Run it from the Parakeet env and point it at the Community‑1 interpreter:
+`run_pipeline.py` drives the four stages automatically (download → ASR → diarization → merge) and writes every artifact into `outputs/<youtube_id>/`.
+
+Run it from the Parakeet env and point it at the Community‑1 interpreter:
 
 ```bash
 source envs/parakeet/bin/activate
@@ -99,7 +104,15 @@ python run_pipeline.py $ID \
   --community-python envs/community1/bin/python
 ```
 
-Artifacts land in `downloads/` and `outputs/<youtube_id>/`.
+Artifacts created per run:
+
+```
+downloads/<youtube_id>.wav        # normalized audio
+outputs/<youtube_id>/transcript.json
+outputs/<youtube_id>/segments.json
+outputs/<youtube_id>/speakers.json
+outputs/<youtube_id>/verbose.json
+```
 
 ---
 
@@ -108,7 +121,7 @@ Artifacts land in `downloads/` and `outputs/<youtube_id>/`.
 1. Clone this repo into a GPU-backed workspace (T4/L4 are sufficient).
 2. Recreate the two virtualenvs (commands above).
 3. Store `HUGGINGFACE_ACCESS_TOKEN` as a secret/env variable.
-4. Run `run_pipeline.py` or add a controller notebook with cells like:
+4. Run `run_pipeline.py` or add a controller notebook with cells like (note each cell activates the correct env):
 
 ```python
 !source envs/parakeet/bin/activate && python download_audio.py --url ...
