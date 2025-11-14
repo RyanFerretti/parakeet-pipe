@@ -1,0 +1,16 @@
+# Virtual environments
+envs/
+*.venv/
+
+# Local artifacts
+downloads/
+outputs/
+*.wav
+*.mp3
+*.json
+*.txt
+
+# Python cache
+__pycache__/
+*.pyc
+
