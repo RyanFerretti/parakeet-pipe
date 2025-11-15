@@ -1,7 +1,4 @@
 nemo_toolkit
-fastapi
-uvicorn
-python-multipart
 pydantic
 fiddle>=0.3.0
 cloudpickle>=3.0.0
