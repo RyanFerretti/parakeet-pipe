@@ -1,45 +1,30 @@
 """
 sitecustomize.py
-----------------
 
 Automatically imported by Python on startup if present on sys.path.
 
-NeMo 2.5.3 expects torch.distributed.tensor.parallel.SequenceParallel to
-exist, but certain PyTorch builds (including Deepnote's default runtime)
-ship it under torch.distributed.tensor.parallel.style or omit it entirely.
-For our single-GPU / CPU inference workflow we don't actually use
-SequenceParallel, so it's enough to ensure the attribute exists.
+We use it to ensure torch.distributed.tensor.parallel exposes
+SequenceParallel so NeMo 2.5.3 stops crashing on import. For our
+single-GPU/CPU inference use case, SequenceParallel is not actually
+used at runtime; we just need the symbol to exist.
 """
 
+import torch
 
-def _ensure_sequence_parallel_symbol() -> None:
-    try:
-        from torch.distributed.tensor.parallel import SequenceParallel  # type: ignore  # noqa: F401
-        return  # symbol is already available
-    except Exception:
-        pass
-
+try:
+    # If this works, great — no patch needed.
+    from torch.distributed.tensor.parallel import SequenceParallel  # type: ignore
+except Exception:
+    # Try to get it from the style module if it exists there.
     try:
         from torch.distributed.tensor.parallel.style import (  # type: ignore
             SequenceParallel as _SequenceParallel,
         )
     except Exception:
-        # Fallback stub that satisfies NeMo's import without doing anything.
+        # Last resort: define a no-op stub. This is fine for inference.
         class _SequenceParallel:  # type: ignore
             def __init__(self, *args, **kwargs):
                 pass
 
     import torch.distributed.tensor.parallel as tp  # type: ignore
-
     tp.SequenceParallel = _SequenceParallel  # type: ignore
-
-
-try:
-    # Only run when torch is available. If torch isn't installed yet,
-    # importing it here would raise and unnecessarily break startup.
-    import torch  # noqa: F401
-except Exception:
-    pass
-else:
-    _ensure_sequence_parallel_symbol()
-
