@@ -58,6 +58,12 @@ Add `.gitignore` entries for `envs/`, `downloads/`, `outputs/`, `*.wav`, `*.json
 
 ---
 
+### SequenceParallel shim (NeMo 2.5.3)
+
+Importing `nemo_toolkit==2.5.3` on certain PyTorch builds (including Deepnote’s default runtime) can fail because `torch.distributed.tensor.parallel.SequenceParallel` is missing. The repo ships a root-level `sitecustomize.py` that runs on interpreter startup and patches in a no-op stub if necessary. Leave this file at the project root so local runs and Deepnote sessions both benefit from the shim.
+
+---
+
 ### 2. Manual Stage-by-Stage Run
 
 Assume `$ID` is the YouTube video ID. Each step writes into `downloads/` and `outputs/$ID/`.
@@ -123,57 +129,50 @@ outputs/<youtube_id>/verbose.json
 Here’s a canonical setup for Deepnote (or any similar managed GPU notebook):
 
 1. **Clone the repo** into a GPU-backed project (T4 or L4 is plenty).
-2. **Create the two virtualenvs** exactly as described in Section 1. Example cell:
+2. **Install Parakeet requirements into the default `/root/venv`** (Deepnote kernels already run inside this env, so no extra venv is needed):
    ```bash
-   python3.12 -m venv envs/parakeet
-   source envs/parakeet/bin/activate
-   pip install --upgrade pip
-   pip install -r requirements.txt
+   python -m pip install --upgrade pip
+   python -m pip install -r requirements.txt
    ```
-   Followed by a second cell for the Community‑1 env:
+3. **Create the Community‑1 env** (only diarization needs a separate venv):
    ```bash
    python3.12 -m venv envs/community1
    source envs/community1/bin/activate
    pip install --upgrade pip
    pip install -r requirements-community.txt --extra-index-url https://download.pytorch.org/whl/cu121
    ```
-3. **Store `HUGGINGFACE_ACCESS_TOKEN`** as a Deepnote secret or environment variable (Project Settings → Environment → Secrets).
-4. **Run each stage from notebook cells**, making sure every cell activates the correct env:
+4. **Store `HUGGINGFACE_ACCESS_TOKEN`** as a Deepnote secret or environment variable (Project Settings → Environment → Secrets).
+5. **Run each stage from notebook cells.** For commands that need the Parakeet env, you can just call `python ...` (it already points to `/root/venv`). Only diarization commands need to activate `envs/community1`.
    ```bash
-   # Download
-   source envs/parakeet/bin/activate && \
-     python download_audio.py --url "https://youtube.com/watch?v=$ID" \
-       --audio-format wav --output downloads/$ID.wav \
-       [--cookies-file cookies.txt]
-     python download_audio.py --url "https://youtube.com/watch?v=$ID" \
-       --audio-format wav --output downloads/$ID.wav \
-       --cookies-file cookies.txt  # optional; upload Netscape cookies file if YouTube asks you to sign in
+   # Download (Parakeet env = default /root/venv)
+   python download_audio.py --url "https://youtube.com/watch?v=$ID" \
+     --audio-format wav --output downloads/$ID.wav \
+     [--cookies-file cookies.txt]  # optional; upload Netscape cookies file if YouTube asks you to sign in
 
-   # ASR
-   source envs/parakeet/bin/activate && \
-     python cli.py --file downloads/$ID.wav --format json --timestamps --disable-diarization \
-       --segments-output outputs/$ID/segments.json --output outputs/$ID/transcript.json
+   # ASR (still /root/venv)
+   python cli.py --file downloads/$ID.wav --format json --timestamps --disable-diarization \
+     --segments-output outputs/$ID/segments.json --output outputs/$ID/transcript.json
 
    # Diarization
    source envs/community1/bin/activate && \
      python community1.py downloads/$ID.wav outputs/$ID/speakers.json
 
-   # Merge
-   source envs/parakeet/bin/activate && \
-     python merge_segments.py \
-       --segments outputs/$ID/segments.json \
-       --speakers outputs/$ID/speakers.json \
-       --include-speakers-in-text \
-       --output outputs/$ID/verbose.json
+   # Merge (back to default env)
+   deactivate 2>/dev/null || true   # optional; ensures we're no longer in community1
+   python merge_segments.py \
+     --segments outputs/$ID/segments.json \
+     --speakers outputs/$ID/speakers.json \
+     --include-speakers-in-text \
+     --output outputs/$ID/verbose.json
    ```
    Or call the orchestrator instead:
    ```bash
-   source envs/parakeet/bin/activate && \
-     python run_pipeline.py $ID \
-       --hf-token "$HUGGINGFACE_ACCESS_TOKEN" \
-       --community-python envs/community1/bin/python
+   python run_pipeline.py $ID \
+     --hf-token "$HUGGINGFACE_ACCESS_TOKEN" \
+     --community-python envs/community1/bin/python \
+     [--download-cookies-file cookies.txt]
    ```
-5. **Inspect the outputs** under `downloads/` and `outputs/<youtube_id>/` or push them to Deepnote artifacts.
+6. **Inspect the outputs** under `downloads/` and `outputs/<youtube_id>/` or push them to Deepnote artifacts.
 
 > **About cookies**  
 > YouTube sometimes asks for authentication on headless/cloud runs. Export cookies from your local browser (Netscape format) using an extension such as “Get cookies.txt” or `yt-dlp --cookies-from-browser chrome --write-cookies cookies.txt`, upload the file to Deepnote, and pass `--cookies-file path/to/cookies.txt` to `download_audio.py`.
