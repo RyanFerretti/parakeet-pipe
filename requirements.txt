@@ -23,3 +23,5 @@ ffmpeg-python
 soundfile
 yt-dlp
 pyannote.core==6.0.1
+pyannote-metrics==4.0.0
+pyannote-pipeline==4.0.0
