@@ -22,3 +22,4 @@ pydub
 ffmpeg-python
 soundfile
 yt-dlp
+pyannote.core==6.0.1
