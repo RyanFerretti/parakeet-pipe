@@ -90,7 +90,11 @@ def main():
     if args.download_cookies_file:
         download_cmd.extend(["--cookies-file", args.download_cookies_file])
 
-    run(download_cmd, label="Download audio")
+    # 🔹 Tiny guard: skip download if audio already exists
+    if audio_path.exists():
+        print(f"Skipping download; found existing {audio_path}")
+    else:
+        run(download_cmd, label="Download audio")
 
     # 2. Parakeet ASR
     run(
